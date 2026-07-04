@@ -127,8 +127,11 @@ async function handleGenerate(e) {
   const maxResults = parseInt(document.getElementById('maxResults').value) || 20;
   const language   = document.getElementById('language').value;
 
-  // Clamp maxResults between 20 and 50
-  const clampedMax = Math.min(Math.max(maxResults, 20), 50);
+  // We want to return exactly the quantity the user requested (e.g. 20, 30, 40, 50).
+  // However, because filters (like rating range, phone/email requirements, city matching) 
+  // remove a lot of results, we must tell Apify to scrape 3x more raw results (up to 150)
+  // so that we have enough records left after filtering to meet the user's requested quantity.
+  const rawScrapeLimit = Math.min(maxResults * 3, 150);
 
   if (!apiKey)    { showToast('Please enter your Apify API key', 'error'); return; }
   if (!query)     { showToast('Please enter a business type / keyword', 'error'); return; }
@@ -139,7 +142,6 @@ async function handleGenerate(e) {
   state.lastLocation = location;
 
   // ── Lock filter values RIGHT NOW (before async work begins) ──
-  // Reading DOM here prevents any timing or cache issues later.
   const ratingRangeVal = document.getElementById('ratingRange').value; // e.g. "3.5:4.5"
   let ratingMin = null;
   let ratingMax = null;
@@ -155,7 +157,7 @@ async function handleGenerate(e) {
     ratingMin,
     ratingMax,
     ratingRangeVal,
-    maxResults:     clampedMax,
+    maxResults:     maxResults, // the targeted quantity we will display
     requirePhone:   document.getElementById('requirePhone').checked,
     requireWebsite: document.getElementById('requireWebsite').checked,
     requireEmail:   document.getElementById('requireEmail').checked,
@@ -173,7 +175,7 @@ async function handleGenerate(e) {
   try {
     const input = {
       searchStringsArray: [`${query} in ${location}`],
-      maxCrawledPlacesPerSearch: clampedMax,
+      maxCrawledPlacesPerSearch: rawScrapeLimit, // scrape more raw data to satisfy filters
       language: language,
       exportPlaceUrls: true,
       includeHistogramOfReviews: false,
