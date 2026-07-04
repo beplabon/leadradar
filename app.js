@@ -155,6 +155,7 @@ async function handleGenerate(e) {
     ratingMin,
     ratingMax,
     ratingRangeVal,
+    maxResults:     clampedMax,
     requirePhone:   document.getElementById('requirePhone').checked,
     requireWebsite: document.getElementById('requireWebsite').checked,
     requireEmail:   document.getElementById('requireEmail').checked,
@@ -406,23 +407,29 @@ function applyFilters(sourceLeads) {
   if (f.requireWebsite) leads = leads.filter(l => !!l.website);
   if (f.requireEmail)   leads = leads.filter(l => !!l.email);
 
-  // ── STEP 4: Location filter ──
+  // ── STEP 4: Strict Location filter (City-based) ──
   const requestedLocation = (state.lastLocation || '').toLowerCase().trim();
   if (requestedLocation) {
-    const keywords = requestedLocation
-      .replace(/[,\.]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length > 2);
+    // Split by comma to extract the city part (e.g. "Memphis, TN" -> "memphis")
+    const locParts = requestedLocation.split(',').map(p => p.trim()).filter(Boolean);
+    const cityQuery = locParts[0] || '';
 
-    if (keywords.length > 0) {
+    if (cityQuery.length > 2) {
       const before = leads.length;
       leads = leads.filter(l => {
-        const locStr = [l.address, l.city, l.state, l.country, l.postalCode]
-          .filter(Boolean).join(' ').toLowerCase();
-        return keywords.some(kw => locStr.includes(kw));
+        const cityVal = (l.city || '').toLowerCase();
+        const addrVal = (l.address || '').toLowerCase();
+        // The city name must appear in the city field or the full address
+        return cityVal.includes(cityQuery) || addrVal.includes(cityQuery);
       });
-      console.log(`[LeadRadar] After location filter: ${before} → ${leads.length}`);
+      console.log(`[LeadRadar] Strict City Filter '${cityQuery}': ${before} → ${leads.length}`);
     }
+  }
+
+  // ── STEP 5: Slice results to exactly match the requested Max Results limit ──
+  if (f.maxResults && leads.length > f.maxResults) {
+    console.log(`[LeadRadar] Slicing output to match Max Results: ${leads.length} → ${f.maxResults}`);
+    leads = leads.slice(0, f.maxResults);
   }
 
   console.log(`[LeadRadar] applyFilters FINAL: ${leads.length} leads`);
